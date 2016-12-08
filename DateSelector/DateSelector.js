@@ -36,7 +36,17 @@
 		this.endTime    = config.endTime;
 		this.recentTime = config.recentTime;
 		this.success    = config.success;
-		
+
+		this.isTouchWebkit = "ontouchstart" in window && "WebKitCSSMatrix" in window;
+		this.touchstart = "touchstart";
+		this.touchmove = "touchmove";
+		this.touchend = 'touchend';
+		if(!this.isTouchWebkit){
+			this.touchstart = "mousedown";
+			this.touchmove = "mousemove";
+			this.touchend = "mouseup";
+		}
+
 		this.ulCount     = 0;
 		this.ulDomArr    = [];
 		this.idxArr      = [];
@@ -55,6 +65,7 @@
 			Y: 0,
 			index: 0
 		};
+		this.curTarget = null;
 		this.resultArr   = [];
 		this.begin_time  = [1970, 1, 1, 0, 0];
 		this.end_time    = [new Date().getFullYear() + 1, 12, 31, 23, 59];
@@ -280,48 +291,55 @@
 						_this.initCommonArr(tempDomUl, tempArray, min, max, '分', i);
 						break;
 				}
-				tempDomUl.addEventListener('touchstart', function () {
-					_this.touch(event, _this, tempDomUl, _this['array' + _this.idxArr[i]], i);
+				tempDomUl.addEventListener(_this.touchstart, function () {
+					_this.touch(event, _this, tempDomUl, i);
 				}, false);
-				tempDomUl.addEventListener('touchmove', function () {
-					_this.touch(event, _this, tempDomUl, _this['array' + _this.idxArr[i]], i);
+				tempDomUl.addEventListener(_this.touchmove, function () {
+					_this.touch(event, _this, tempDomUl, i);
 				}, false);
-				tempDomUl.addEventListener('touchend', function () {
-					_this.touch(event, _this, tempDomUl, _this['array' + _this.idxArr[i]], i);
+				tempDomUl.addEventListener(_this.touchend, function () {
+					_this.touch(event, _this, tempDomUl, i);
 				}, false);
 			});
+			if(!_this.isTouchWebkit){
+				document.addEventListener(_this.touchend, function () {
+					if(_this.curTarget){
+						_this.touch(event, _this, _this.curTarget.target, _this.curTarget.idx);
+					}
+				}, false);
+			}
 		},
 		initBinding: function () {
 			var _this     = this;
 			var bg        = $id('date-selector-bg-' + _this.container);
 			var container = $id('date-selector-container-' + _this.container);
 			var body      = doc.body;
-			on('touchstart', _this.input, function () {
+			on(_this.touchstart, _this.input, function () {
 				bg.classList.add('date-selector-bg-up');
 				container.classList.add('date-selector-container-up');
 				body.classList.add('date-selector-locked');
 			}, false);
 			
-			on('touchstart', 'date-selector-btn-save-' + _this.container, function () {
+			on(_this.touchstart, 'date-selector-btn-save-' + _this.container, function () {
 				_this.success(_this.resultArr);
 				bg.classList.remove('date-selector-bg-up');
 				container.classList.remove('date-selector-container-up');
 				body.classList.remove('date-selector-locked');
 			}, false);
 			
-			on('touchstart', 'date-selector-bg-' + _this.container, function () {
+			on(_this.touchstart, 'date-selector-bg-' + _this.container, function () {
 				bg.classList.remove('date-selector-bg-up');
 				container.classList.remove('date-selector-container-up');
 				body.classList.remove('date-selector-locked');
 			}, false);
 			
-			on('touchstart', 'date-selector-btn-cancel', function () {
+			on(_this.touchstart, 'date-selector-btn-cancel', function () {
 				bg.classList.remove('date-selector-bg-up');
 				container.classList.remove('date-selector-container-up');
 				body.classList.remove('date-selector-locked');
 			}, false);
 			
-			on('touchstart', 'date-selector-tab', function (event) {
+			on(_this.touchstart, 'date-selector-tab', function (event) {
 				var tab     = $class('date-selector-tab');
 				var content = $class('date-selector-content');
 				loop(0, tab.length, function (i) {
@@ -481,17 +499,35 @@
 			}
 			return this;
 		},
-		touch: function (event, that, $selector, array, idx) {
+		pos:function (e) {
+			if(this.isTouchWebkit){
+				return {
+					x: event.touches[0].clientX,
+					y: event.touches[0].clientY
+				}
+			}else{
+				e = e || window.event;
+				var D = document.documentElement;
+				if (e.pageX) return {x: e.pageX, y: e.pageY};
+				return {
+					x: e.clientX + D.scrollLeft - D.clientLeft,
+					y: e.clientY + D.scrollTop - D.clientTop
+				};
+			}
+		},
+		touch: function (event, that, $selector,idx) {
 			event = event || window.event;
 			event.preventDefault();
 			switch (event.type) {
-				case "touchstart":
+				case that.touchstart:
 					that.move.speed = [];
-					that.start.Y    = event.touches[0].clientY;
+					that.start.Y    = that.pos(event).y;
 					that.start.time = Date.now();
+					that.curTarget = !that.isTouchWebkit ? { target : $selector , idx : idx } : null;
 					break;
-				case "touchend":
-					that.end.Y         = event.changedTouches[0].clientY;
+				case that.touchend:
+					that.curTarget = null;
+					that.end.Y         = that.isTouchWebkit ? event.changedTouches[0].clientY : that.pos(event).y;
 					var tempDis        = that.distance[idx] + (that.start.Y - that.end.Y);
 					that.distance[idx] = tempDis < 0 ? 0 : (tempDis < that.maxHeight[idx] ? tempDis : that.maxHeight[idx]);
 					that.initSpeed(that.move.speed, that.start.Y - that.end.Y, that.maxHeight[idx], idx);
@@ -506,9 +542,12 @@
 					that.checkRange(0);
 					
 					break;
-				case "touchmove":
+				case that.touchmove:
+					if(!that.isTouchWebkit && !that.curTarget){
+						return;
+					}
 					event.preventDefault();
-					that.move.Y = event.touches[0].clientY;
+					that.move.Y = that.pos(event).y;
 					var offset  = that.start.Y - that.move.Y;
 					if (that.distance[idx] == 0 && offset < 0) {
 						$selector.style.transform        = 'translate3d(0,' + 1.5 * that.liHeight + 'px, 0)';
