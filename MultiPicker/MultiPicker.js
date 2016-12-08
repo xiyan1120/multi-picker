@@ -26,13 +26,23 @@
 			}
 		})
 	}
-	
+
 	function MultiPicker(config) {
 		this.input     = config.input;
 		this.container = config.container;
 		this.jsonData  = config.jsonData;
 		this.success   = config.success;
-		
+
+		this.isTouchWebkit = "ontouchstart" in window && "WebKitCSSMatrix" in window;
+		this.touchstart = "touchstart";
+		this.touchmove = "touchmove";
+		this.touchend = 'touchend';
+		if(!this.isTouchWebkit){
+			this.touchstart = "mousedown";
+			this.touchmove = "mousemove";
+			this.touchend = "mouseup";
+		}
+
 		this.ulCount   = 0;
 		this.ulIdx     = 0;
 		this.ulDomArr  = [];
@@ -53,6 +63,7 @@
 			Y: 0,
 			status: true,
 		};
+		this.curTarget = null;
 		this.resultArr = [];
 		this.initDomFuc();
 		this.initReady(0, this.jsonData[0]);
@@ -134,18 +145,23 @@
 					_this.ulDomArr.push(tempDomUl);
 					_this.distance.push(0);
 					_this.insertLiArr(tempDomUl, _this.jsonArr[i]);
-					
-					var tempArray = _this.jsonArr[i];
-					tempDomUl.addEventListener('touchstart', function () {
-						_this.touch(event, _this, tempDomUl, tempArray, i);
+					tempDomUl.addEventListener(_this.touchstart, function () {
+						_this.touch(event, _this, tempDomUl, i);
 					}, false);
-					tempDomUl.addEventListener('touchmove', function () {
-						_this.touch(event, _this, tempDomUl, tempArray, i);
+					tempDomUl.addEventListener(_this.touchmove, function () {
+						_this.touch(event, _this, tempDomUl, i);
 					}, false);
-					tempDomUl.addEventListener('touchend', function () {
-						_this.touch(event, _this, tempDomUl, tempArray, i);
+					tempDomUl.addEventListener(_this.touchend, function () {
+						_this.touch(event, _this, tempDomUl, i);
 					}, false);
 				});
+				if(!_this.isTouchWebkit){
+					document.addEventListener(_this.touchend, function () {
+						if(_this.curTarget){
+							_this.touch(event, _this, _this.curTarget.target, _this.curTarget.idx);
+						}
+					}, false);
+				}
 			} else {
 				for ( var j = _this.ulCount - 1; j > _this.idxArr.length - 1; j-- ) {
 					var oldPicker = $class('multi-picker')[j];
@@ -172,26 +188,26 @@
 			var bg        = $id('multi-picker-bg-' + _this.container);
 			var container = $id('multi-picker-container-' + _this.container);
 			var body      = doc.body;
-			on('touchstart', _this.input, function () {
+			on(_this.touchstart, _this.input, function () {
 				bg.classList.add('multi-picker-bg-up');
 				container.classList.add('multi-picker-container-up');
 				body.classList.add('multi-picker-locked');
 			}, false);
 			
-			on('touchstart', 'multi-picker-btn-save-' + _this.container, function () {
+			on(_this.touchstart, 'multi-picker-btn-save-' + _this.container, function () {
 				_this.success(_this.resultArr);
 				bg.classList.remove('multi-picker-bg-up');
 				container.classList.remove('multi-picker-container-up');
 				body.classList.remove('multi-picker-locked');
 			}, false);
 			
-			on('touchstart', 'multi-picker-bg-' + _this.container, function () {
+			on(_this.touchstart, 'multi-picker-bg-' + _this.container, function () {
 				bg.classList.remove('multi-picker-bg-up');
 				container.classList.remove('multi-picker-container-up');
 				body.classList.remove('multi-picker-locked');
 			}, false);
 			
-			on('touchstart', 'multi-picker-btn-cancel', function () {
+			on(_this.touchstart, 'multi-picker-btn-cancel', function () {
 				bg.classList.remove('multi-picker-bg-up');
 				container.classList.remove('multi-picker-container-up');
 				body.classList.remove('multi-picker-locked');
@@ -237,22 +253,39 @@
 				this.move.speed[0] = this.move.speed[0] > 0.2 ? .2 : this.move.speed[0];
 			}
 		},
-		touch: function (event, that, $picker, array, idx) {
+		pos:function (e) {
+			if(this.isTouchWebkit){
+				return {
+					x: event.touches[0].clientX,
+					y: event.touches[0].clientY
+				}
+			}else{
+				e = e || window.event;
+				var D = document.documentElement;
+				if (e.pageX) return {x: e.pageX, y: e.pageY};
+				return {
+					x: e.clientX + D.scrollLeft - D.clientLeft,
+					y: e.clientY + D.scrollTop - D.clientTop
+				};
+			}
+		},
+		touch: function (event, that, $picker, idx) {
 			event = event || window.event;
 			event.preventDefault();
 			switch (event.type) {
-				case "touchstart":
+				case that.touchstart:
 					if (that.end.status) {
 						that.end.status = !that.end.status;
 						event.preventDefault();
 						that.move.speed = [];
-						that.start.Y    = event.touches[0].clientY;
+						that.start.Y    = that.pos(event).y;
 						that.start.time = Date.now();
+						that.curTarget = !that.isTouchWebkit ? { target : $picker , idx : idx } : null;
 					}
-					
 					break;
-				case "touchend":
-					that.end.Y         = Math.abs(event.changedTouches[0].clientY);
+				case that.touchend:
+					that.curTarget = null;
+					that.end.Y         = Math.abs(that.isTouchWebkit ? event.changedTouches[0].clientY : that.pos(event).y);
 					var tempDis        = that.distance[idx] + (that.start.Y - that.end.Y);
 					var temp           = that.distance[idx];
 					that.distance[idx] = tempDis < 0 ? 0 : (tempDis < that.maxHeight[idx] - this.liHeight * 5 ? tempDis : that.maxHeight[idx] - this.liHeight * 5);
@@ -267,9 +300,12 @@
 						that.end.status = true;
 					}, that.move.speed[0] * 1000);
 					break;
-				case "touchmove":
+				case that.touchmove:
+					if(!that.isTouchWebkit && !that.curTarget){
+						return;
+					}
 					event.preventDefault();
-					that.move.Y = event.touches[0].clientY;
+					that.move.Y = that.pos(event).y;
 					var offset  = that.start.Y - that.move.Y;
 					if (that.distance[idx] == 0 && offset < 0) {
 						$picker.style.transform        = 'translate3d(0,' + 1.5 * that.liHeight + 'px, 0)';
