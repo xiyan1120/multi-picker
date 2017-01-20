@@ -8,7 +8,11 @@
 	function $id(id) {
 		return doc.getElementById(id);
 	}
-	
+
+	function $all($parent,selector) {
+		return $parent.querySelectorAll(selector);
+	}
+
 	function $class(name) {
 		return doc.getElementsByClassName(name);
 	}
@@ -28,9 +32,10 @@
 	}
 
 	function MultiPicker(config) {
-		this.input     = config.input;
+		this.trigger     = config.trigger;
 		this.container = config.container;
 		this.jsonData  = config.jsonData;
+		this.defaultVal = config.defaultVal;
 		this.success   = config.success;
 
 		this.isTouchWebkit = "ontouchstart" in window && "WebKitCSSMatrix" in window;
@@ -72,6 +77,30 @@
 	
 	MultiPicker.prototype = {
 		constructor: MultiPicker,
+		init:function (defaultValue) {
+			var _this     = this;
+			var bg        = $id('multi-picker-bg-' + _this.container);
+			var container = $id('multi-picker-container-' + _this.container);
+			var body      = doc.body;
+			bg.classList.add('multi-picker-bg-up');
+			container.classList.add('multi-picker-container-up');
+			body.classList.add('multi-picker-locked');
+			_this.defaultVal = defaultValue ? defaultValue : [];
+			_this.initDefault(0);
+		},
+		initDefault:function(idx){
+			var _this = this;
+			if(_this.defaultVal.length > idx){
+				var idVal = _this.defaultVal[idx];
+				var $picker = $id('multi-picker-' + _this.container + '-' + idx);
+				var $li = $all($picker , "li[data-id='"+ idVal  +"']");
+				if($li && $li.length){
+					//默认的值肯定是往上面的。所以默认为负数。
+					//扣除前面两个占位的li标签
+					_this.changeRange(_this,idx,$picker,0,(($li[0].offsetTop - _this.liHeight * 2) * -1),true);
+				}
+			}
+		},
 		generateArrData: function (targetArr) {
 			var tempArr = [];
 			loop(0, targetArr.length, function (i) {
@@ -110,7 +139,7 @@
 				+ '<div  class="multi-picker-container" id="multi-picker-container-' + _this.container + '">'
 				+ '<div class="multi-picker-btn-box">'
 				+ '<div class="multi-picker-btn" id="multi-picker-btn-cancel">返回</div>'
-				+ '<div class="multi-picker-btn" id="multi-picker-btn-save-' + _this.container + '">提交</div>'
+				+ '<div class="multi-picker-btn" id="multi-picker-btn-save-' + _this.container + '">确定</div>'
 				+ '</div>'
 				+ '<div class="multi-picker-content">'
 				+ '<div class="multi-picker-up-shadow"></div>'
@@ -188,10 +217,8 @@
 			var bg        = $id('multi-picker-bg-' + _this.container);
 			var container = $id('multi-picker-container-' + _this.container);
 			var body      = doc.body;
-			on(_this.touchstart, _this.input, function () {
-				bg.classList.add('multi-picker-bg-up');
-				container.classList.add('multi-picker-container-up');
-				body.classList.add('multi-picker-locked');
+			on(_this.touchstart, _this.trigger, function () {
+				_this.init();
 			}, false);
 			
 			on(_this.touchstart, 'multi-picker-btn-save-' + _this.container, function () {
@@ -269,6 +296,23 @@
 				};
 			}
 		},
+		changeRange:function(that,idx,$picker,startY,endY,isInitDefault){
+			var tempDis        = that.distance[idx] + (startY - endY);
+			var temp           = that.distance[idx];
+			that.distance[idx] = tempDis < 0 ? 0 : (tempDis < that.maxHeight[idx] - this.liHeight * 5 ? tempDis : that.maxHeight[idx] - this.liHeight * 5);
+			that.initSpeed(that.move.speed, startY - endY, that.maxHeight[idx], idx);
+
+			$picker.style.transform        = 'translate3d(0,-' + that.distance[idx] + 'px, 0)';
+			$picker.style.webkitTransform  = 'translate3d(0,-' + that.distance[idx] + 'px, 0)';
+			$picker.style.transition       = 'transform ' + that.move.speed[0] + 's ease-out';
+			$picker.style.webkitTransition = '-webkit-transform ' + that.move.speed[0] + 's ease-out';
+			if (temp != that.distance[idx]) {
+				that.checkRange(idx);
+				if(isInitDefault){
+					that.initDefault(idx + 1);
+				}
+			}
+		},
 		touch: function (event, that, $picker, idx) {
 			event = event || window.event;
 			event.preventDefault();
@@ -286,16 +330,7 @@
 				case that.touchend:
 					that.curTarget = null;
 					that.end.Y         = Math.abs(that.isTouchWebkit ? event.changedTouches[0].clientY : that.pos(event).y);
-					var tempDis        = that.distance[idx] + (that.start.Y - that.end.Y);
-					var temp           = that.distance[idx];
-					that.distance[idx] = tempDis < 0 ? 0 : (tempDis < that.maxHeight[idx] - this.liHeight * 5 ? tempDis : that.maxHeight[idx] - this.liHeight * 5);
-					that.initSpeed(that.move.speed, that.start.Y - that.end.Y, that.maxHeight[idx], idx);
-					
-					$picker.style.transform        = 'translate3d(0,-' + that.distance[idx] + 'px, 0)';
-					$picker.style.webkitTransform  = 'translate3d(0,-' + that.distance[idx] + 'px, 0)';
-					$picker.style.transition       = 'transform ' + that.move.speed[0] + 's ease-out';
-					$picker.style.webkitTransition = '-webkit-transform ' + that.move.speed[0] + 's ease-out';
-					if (temp != that.distance[idx]) that.checkRange(idx);
+					that.changeRange(that,idx,$picker,that.start.Y,that.end.Y);
 					setTimeout(function () {
 						that.end.status = true;
 					}, that.move.speed[0] * 1000);
