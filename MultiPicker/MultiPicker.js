@@ -95,8 +95,6 @@
 				var $picker = $id('multi-picker-' + _this.container + '-' + idx);
 				var $li = $all($picker , "li[data-id='"+ idVal  +"']");
 				if($li && $li.length){
-					//默认的值肯定是往上面的。所以默认为负数。
-					//扣除前面两个占位的li标签
 					_this.changeRange(_this,idx,$picker,0,(($li[0].offsetTop - _this.liHeight * 2) * -1),true);
 				}
 			}
