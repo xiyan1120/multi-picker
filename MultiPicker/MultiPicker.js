@@ -36,6 +36,7 @@
 		this.container = config.container;
 		this.jsonData  = config.jsonData;
 		this.defaultVal = config.defaultVal;
+		this.hasInitDefault = false;
 		this.success   = config.success;
 
 		this.isTouchWebkit = "ontouchstart" in window && "WebKitCSSMatrix" in window;
@@ -87,10 +88,11 @@
 			body.classList.add('multi-picker-locked');
 			_this.defaultVal = defaultValue ? defaultValue : [];
 			_this.initDefault(0);
+			_this.hasInitDefault = true;
 		},
 		initDefault:function(idx){
 			var _this = this;
-			if(_this.defaultVal.length > idx){
+			if(!_this.hasInitDefault && _this.defaultVal.length > idx){
 				var idVal = _this.defaultVal[idx];
 				var $picker = $id('multi-picker-' + _this.container + '-' + idx);
 				var $li = $all($picker , "li[data-id='"+ idVal  +"']");
